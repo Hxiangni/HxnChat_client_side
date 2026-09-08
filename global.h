@@ -5,6 +5,7 @@
 #include "QStyle"
 //extern声明看你的笔记去
 //repolish是一个变量、能被返回值为void接收参数为QWidget*的可调用对象给赋值
+//重新设置QT显示的样式颜色
 extern std::function<void(QWidget*)> repolish;
 
 #endif // GLOBAL_H

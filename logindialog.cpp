@@ -1,5 +1,6 @@
 #include "logindialog.h"
 #include "ui_logindialog.h"
+#include "global.h"      // repolish：改完动态属性后强制重算样式
 
 #include <QLabel>
 #include <QLineEdit>
@@ -9,6 +10,7 @@
 #include <QGraphicsDropShadowEffect>
 #include <QPropertyAnimation>
 #include <QEasingCurve>
+#include <QRegularExpression>
 #include <QPixmap>
 #include <QPainter>
 #include <QPen>
@@ -60,12 +62,16 @@ LoginDialog::LoginDialog(QWidget *parent)
 {
     //把 ui 文件定义的全部控件 new 出来，布局、属性全部设置好，挂载到this上。
     ui->setupUi(this);
+    // registerFields_ / loginFields_ 是值对象成员，已随对象自动构造完毕，
+    // initUI() 只需直接往里填控件指针即可。
     initUI();//这里为什么不放在ui->setupUi上面？
     initConnect();//信号绑定
 }
 
 LoginDialog::~LoginDialog()
 {
+    // registerFields_ / loginFields_ 是值对象，自动析构，无需手动 delete；
+    // 控件本体由 Qt 父子树统一回收。这里只需释放 new 出来的 ui 包装。
     delete ui;
 }
 
@@ -154,6 +160,18 @@ void LoginDialog::initUI()
         }
         #btnCode:hover  { background: #f3cdd9; color: #a84266; }
         #btnCode:pressed { background: #ebb7c9; }
+
+        /* ---------- 注册表单提示 err_tip：同一标签靠 state 属性切红/绿 ---------- */
+        #registerPanel #regErrTip[state="err"] {
+            color: #d94f5a;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        #registerPanel #regErrTip[state="ok"] {
+            color: #2e9e5b;
+            font-size: 12px;
+            font-weight: bold;
+        }
 
         /* ---------- 蓝系(右)：登录面板 ---------- */
         #loginPanel QLineEdit { background: #f3f8fd; }
@@ -298,6 +316,14 @@ void LoginDialog::initUI()
     codeRowLayout->addWidget(registerFields_.codeBtn_, 0);
     codeRow->setFixedSize(320, 42);
     regLayout->addWidget(codeRow, 0, Qt::AlignHCenter);
+
+    // 提示行：红字报错 / 绿字成功。固定 18px 高，出现/消失不上下顶动其它控件
+    registerFields_.errTip_ = new QLabel(registerPanel);
+    registerFields_.errTip_->setObjectName("regErrTip");
+    registerFields_.errTip_->setAlignment(Qt::AlignCenter);
+    registerFields_.errTip_->setFixedHeight(18);
+    registerFields_.errTip_->setProperty("state", "ok");   // 初始态：空文本，绿字规则不显形
+    regLayout->addWidget(registerFields_.errTip_, 0, Qt::AlignHCenter);
 
     // 密码 + 确认密码
     registerFields_.passwordEdit_ = new QLineEdit(registerPanel);
@@ -509,17 +535,36 @@ void LoginDialog::initConnect()
             &LoginDialog::onGetCodeClicked);
 }
 
+void LoginDialog::showTip(const QString &str, bool isOk)
+{
+    registerFields_.errTip_->setText(str);
+    // 同一个标签：err→红字规则，ok→绿字规则（见 QSS [state=...] 两段）
+    registerFields_.errTip_->setProperty("state", isOk ? "ok" : "err");
+    repolish(registerFields_.errTip_);   // 属性变了，必须强制 Qt 重算样式才会变色
+}
+
 void LoginDialog::onGetCodeClicked()
 {
     // 读注册面板里「邮箱」输入框的内容（registerFields_.emailEdit_ 才是邮箱框）
+    //text()返回的是QString,QString.trimmed()返回一个新字符串，把字符串开头、结尾的空白字符全部删掉。
     const QString email = registerFields_.emailEdit_
                               ? registerFields_.emailEdit_->text().trimmed()
                               : QString();
 
     if (email.isEmpty()) {
-        return;   // TODO: 弹提示「请输入邮箱」
+        showTip(tr("请输入邮箱"));
+        return;
     }
 
-    // TODO(下一步)：用 QRegularExpression 校验邮箱格式 → 通过后调用后端发送验证码
-    // → 并把 registerFields_.codeBtn_ 切成 60 秒倒计时
+    // 邮箱地址正则：^\w+(\.\w+)*@\w+(\.\w+)+$
+    // 首尾加锚定，确保吃下整个字符串，避免 "乱写user@x.com乱写" 这种子串也通过
+    QRegularExpression regex(R"(^\w+(\.\w+)*@\w+(\.\w+)+$)");
+    bool match = regex.match(email).hasMatch(); // 执行正则表达式匹配
+    if(match){
+        // TODO(下一步): 发送http请求获取验证码。成功回调里显示绿字并禁用按钮倒计时：
+        //   showTip(tr("验证码已发送，请查收邮箱"), true);
+        //   并把 codeBtn_ 切成 60 秒倒计时（期间不可再点）
+    }else{
+        showTip(tr("邮箱地址不正确"));
+    }
 }

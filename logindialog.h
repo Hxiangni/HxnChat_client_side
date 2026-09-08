@@ -11,9 +11,9 @@ class LoginDialog;
 }
 QT_END_NAMESPACE
 class QLabel;
+class QLineEdit;
 class QPushButton;
 class QPropertyAnimation;
-class QLineEdit;
 
 class LoginDialog : public QDialog
 {
@@ -25,11 +25,12 @@ public:
 
 
     //软槽（由 initConnect 手动 connect）
-    void onGetCodeClicked();          // 获取验证码
+    void onGetCodeClicked ();          // 获取验证码
 private:
     void initUI();
     void initConnect();
     void slideTo(bool toRegister);   // 滑块滑动到目标侧 + 文案翻转
+    void showTip(const QString &str, bool isOk = false);   // err_tip 提示：红(err)/绿(ok)
     Ui::LoginDialog *ui;//资源管理器指针管理里面的控件
 
     //滑块（M3/M4）
@@ -40,12 +41,15 @@ private:
     QLabel            *slideOverlay_  = nullptr;   // 滑动快照层：动画期间只搬这张截图，避免每帧重绘滑块控件
     QPropertyAnimation *slideAnim_    = nullptr;   // 滑动动画句柄
 
-    // 代码创建的控件按"面板"打包（迷你版 Ui:: 聚合，避免平铺一堆裸指针）
+    // 注册/登录面板的控件集合——只属于本对话框，故做成私有内嵌类 + 值对象：
+    // 结构体对象随 LoginDialog 自动构造/析构，无需手动 new/delete；
+    // 结构体里存放的控件指针指向的控件本体，由 Qt 父子树在销毁对话框时统一回收。
     struct RegisterFields {                        // 注册面板(左半边，平时被滑块盖住)
         QLineEdit   *usernameEdit_ = nullptr;      // 用户名
         QLineEdit   *emailEdit_    = nullptr;      // 邮箱
         QLineEdit   *codeEdit_     = nullptr;      // 验证码
         QPushButton *codeBtn_      = nullptr;      // 获取验证码
+        QLabel      *errTip_       = nullptr;      // 红/绿两态提示（state 属性驱动 QSS）错误提示
         QLineEdit   *passwordEdit_ = nullptr;      // 密码
         QLineEdit   *confirmEdit_  = nullptr;      // 确认密码
         QPushButton *registerBtn_  = nullptr;      // 注册
@@ -58,8 +62,8 @@ private:
         QPushButton *toRegisterLink_ = nullptr;    // 没有账号？去注册
     };
 
-    RegisterFields registerFields_;                // 注册面板控件打包
-    LoginFields    loginFields_;                   // 登录面板控件打包
+    RegisterFields registerFields_;                // 注册面板控件打包（值对象，免管理）
+    LoginFields    loginFields_;                   // 登录面板控件打包（值对象，免管理）
     QPushButton    *closeBtn_      = nullptr;      // 右上角关闭按钮
 };
 
