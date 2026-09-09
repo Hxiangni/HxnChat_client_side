@@ -1,6 +1,7 @@
 #include "logindialog.h"
 #include "ui_logindialog.h"
 #include "global.h"      // repolish：改完动态属性后强制重算样式
+#include "httpmgr.h"
 
 #include <QLabel>
 #include <QLineEdit>
@@ -18,6 +19,9 @@
 #include <QLinearGradient>
 #include <QColor>
 #include <QFont>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <spdlog/spdlog.h>
 
 // TODO(后续接真实数据): 从「记住我 / 最近登录」配置读取上次登录用户名与头像路径，
 // 替换掉下面这个占位演示常量，以及 makeRoundAvatar() 里的默认 logo。
@@ -65,6 +69,7 @@ LoginDialog::LoginDialog(QWidget *parent)
     // registerFields_ / loginFields_ 是值对象成员，已随对象自动构造完毕，
     // initUI() 只需直接往里填控件指针即可。
     initUI();//这里为什么不放在ui->setupUi上面？
+    initHttpHandler();//注册各请求id的处理函数（务必先注册，否则回调时 _handlers 为空）忘记了！！！
     initConnect();//信号绑定
 }
 
@@ -73,6 +78,28 @@ LoginDialog::~LoginDialog()
     // registerFields_ / loginFields_ 是值对象，自动析构，无需手动 delete；
     // 控件本体由 Qt 父子树统一回收。这里只需释放 new 出来的 ui 包装。
     delete ui;
+}
+
+void LoginDialog::initHttpHandler()
+{
+    /***************************************************
+     * 这里lambda捕获的是裸指针
+     * 异步回调时会调用this->show()
+     * 当客户在这句执行之前关闭了导致this变成野指针造成程序崩溃
+     * 后续可以考虑使用智能指针self=shared_from_this然后传给lambda
+     * 来保证回调之前对象没有没析构
+     **************************************************/
+    _handlers.insert(ReqId::ID_GET_VARIFY_CODE, [this](QJsonObject jsonObj){
+        //分析post请求的回包
+        int error = jsonObj["error"].toInt();
+        if(error != ErrorCodes::SUCCESS){
+            showTip(tr("参数错误"),false);
+            return;
+        }
+        auto email = jsonObj["email"].toString();
+        showTip(tr("验证码已发送到邮箱，注意查收"), true);
+        spdlog::debug("email is {}",email.toStdString());
+    });
 }
 
 void LoginDialog::initUI()
@@ -297,6 +324,23 @@ void LoginDialog::initUI()
     registerFields_.emailEdit_->setFixedSize(320, 42);
     regLayout->addWidget(registerFields_.emailEdit_, 0, Qt::AlignHCenter);
 
+    // 密码 + 确认密码
+    registerFields_.passwordEdit_ = new QLineEdit(registerPanel);
+    registerFields_.passwordEdit_->setObjectName("regPass");
+    registerFields_.passwordEdit_->setPlaceholderText(QStringLiteral("密码"));
+    registerFields_.passwordEdit_->setEchoMode(QLineEdit::Password);   // 圆点显示
+    registerFields_.passwordEdit_->setFixedSize(320, 42);
+    regLayout->addWidget(registerFields_.passwordEdit_, 0, Qt::AlignHCenter);
+
+    registerFields_.confirmEdit_ = new QLineEdit(registerPanel);
+    registerFields_.confirmEdit_->setObjectName("regPass2");
+    registerFields_.confirmEdit_->setPlaceholderText(QStringLiteral("确认密码"));
+    registerFields_.confirmEdit_->setEchoMode(QLineEdit::Password);
+    registerFields_.confirmEdit_->setFixedSize(320, 42);
+    regLayout->addWidget(registerFields_.confirmEdit_, 0, Qt::AlignHCenter);
+
+
+
     // 验证码行：验证码输入框 + 「获取验证码」同行
     auto *codeRow = new QWidget(registerPanel);
     auto *codeRowLayout = new QHBoxLayout(codeRow);
@@ -317,6 +361,15 @@ void LoginDialog::initUI()
     codeRow->setFixedSize(320, 42);
     regLayout->addWidget(codeRow, 0, Qt::AlignHCenter);
 
+
+    //注册按钮
+    regLayout->addSpacing(4);
+    registerFields_.registerBtn_ = new QPushButton(QStringLiteral("注  册"), registerPanel);
+    registerFields_.registerBtn_->setObjectName("btnRegister");
+    registerFields_.registerBtn_->setCursor(Qt::PointingHandCursor);
+    registerFields_.registerBtn_->setFixedSize(320, 44);
+    regLayout->addWidget(registerFields_.registerBtn_, 0, Qt::AlignHCenter);
+
     // 提示行：红字报错 / 绿字成功。固定 18px 高，出现/消失不上下顶动其它控件
     registerFields_.errTip_ = new QLabel(registerPanel);
     registerFields_.errTip_->setObjectName("regErrTip");
@@ -325,33 +378,14 @@ void LoginDialog::initUI()
     registerFields_.errTip_->setProperty("state", "ok");   // 初始态：空文本，绿字规则不显形
     regLayout->addWidget(registerFields_.errTip_, 0, Qt::AlignHCenter);
 
-    // 密码 + 确认密码
-    registerFields_.passwordEdit_ = new QLineEdit(registerPanel);
-    registerFields_.passwordEdit_->setObjectName("regPass");
-    registerFields_.passwordEdit_->setPlaceholderText(QStringLiteral("密码"));
-    registerFields_.passwordEdit_->setEchoMode(QLineEdit::Password);   // 圆点显示
-    registerFields_.passwordEdit_->setFixedSize(320, 42);
-    regLayout->addWidget(registerFields_.passwordEdit_, 0, Qt::AlignHCenter);
-
-    registerFields_.confirmEdit_ = new QLineEdit(registerPanel);
-    registerFields_.confirmEdit_->setObjectName("regPass2");
-    registerFields_.confirmEdit_->setPlaceholderText(QStringLiteral("确认密码"));
-    registerFields_.confirmEdit_->setEchoMode(QLineEdit::Password);
-    registerFields_.confirmEdit_->setFixedSize(320, 42);
-    regLayout->addWidget(registerFields_.confirmEdit_, 0, Qt::AlignHCenter);
-
-    regLayout->addSpacing(4);
-    registerFields_.registerBtn_ = new QPushButton(QStringLiteral("注  册"), registerPanel);
-    registerFields_.registerBtn_->setObjectName("btnRegister");
-    registerFields_.registerBtn_->setCursor(Qt::PointingHandCursor);
-    registerFields_.registerBtn_->setFixedSize(320, 44);
-    regLayout->addWidget(registerFields_.registerBtn_, 0, Qt::AlignHCenter);
-
+    //切换到登录界面
     registerFields_.toLoginLink_ = new QPushButton(QStringLiteral("已有账号？去登录"), registerPanel);
     registerFields_.toLoginLink_->setObjectName("textLink");
     registerFields_.toLoginLink_->setCursor(Qt::PointingHandCursor);
     regLayout->addWidget(registerFields_.toLoginLink_, 0, Qt::AlignHCenter);
     regLayout->addStretch(1);
+
+
 
     // ========== 5. 登录面板：占右半边 (430,0,430,520) ==========
     auto *loginPanel = new QWidget(card);
@@ -533,6 +567,9 @@ void LoginDialog::initConnect()
     // —— 注册表单：获取验证码 ——
     connect(registerFields_.codeBtn_, &QPushButton::clicked, this,
             &LoginDialog::onGetCodeClicked);
+
+    //请求发送完
+    connect(&HttpMgr::GetInstance(), &HttpMgr::sig_reg_mod_finish, this, &LoginDialog::slot_reg_mod_finish);
 }
 
 void LoginDialog::showTip(const QString &str, bool isOk)
@@ -541,6 +578,49 @@ void LoginDialog::showTip(const QString &str, bool isOk)
     // 同一个标签：err→红字规则，ok→绿字规则（见 QSS [state=...] 两段）
     registerFields_.errTip_->setProperty("state", isOk ? "ok" : "err");
     repolish(registerFields_.errTip_);   // 属性变了，必须强制 Qt 重算样式才会变色
+}
+
+/************************************************************************
+ * 函数的信号在httpmgr中收到回包后发送sig_http_finish信号
+   对应的槽函数根据模块分发信号sig_reg_mod_finish
+ *
+ ************************************************************************/
+void LoginDialog::slot_reg_mod_finish(ReqId id, QString res, ErrorCodes err)
+{
+    if(err != ErrorCodes::SUCCESS){
+        showTip(tr("网络请求错误"),false);
+        return;
+    }
+
+    //回复报文的字节流转化为json
+    // 解析 JSON 字符串,res需转化为QByteArray
+    QJsonDocument jsonDoc = QJsonDocument::fromJson(res.toUtf8());
+    //json解析错误
+    if(jsonDoc.isNull()){
+        showTip(tr("json解析错误"),false);
+        spdlog::warn("json解析错误，解析返回Null");
+        return;
+    }
+
+    //json解析错误
+    if(!jsonDoc.isObject()){
+        showTip(tr("json解析错误"),false);
+        spdlog::warn("解析后文件的根节点不是一个 JSON 对象");
+        return;
+    }
+
+    QJsonObject jsonObj = jsonDoc.object();
+
+    // 按请求 id 分发业务：先在 _handlers 里查找注册过的处理函数
+    auto it = _handlers.find(id);
+    if (it != _handlers.end()) {
+        it.value()(jsonObj);   // 调用该请求对应的处理函数（解析回包、提示、倒计时等）
+        // TODO: 把 codeBtn_ 切成 60 秒倒计时（期间不可再点）
+    } else {
+        // 找不到就不调用，避免空 std::function 被调用抛异常
+        spdlog::warn("收到未注册的请求回包, ReqId={}", static_cast<int>(id));
+    }
+    return;
 }
 
 void LoginDialog::onGetCodeClicked()
@@ -561,10 +641,14 @@ void LoginDialog::onGetCodeClicked()
     QRegularExpression regex(R"(^\w+(\.\w+)*@\w+(\.\w+)+$)");
     bool match = regex.match(email).hasMatch(); // 执行正则表达式匹配
     if(match){
-        // TODO(下一步): 发送http请求获取验证码。成功回调里显示绿字并禁用按钮倒计时：
-        //   showTip(tr("验证码已发送，请查收邮箱"), true);
-        //   并把 codeBtn_ 切成 60 秒倒计时（期间不可再点）
+        // 发送 http 请求获取验证码；结果由 slot_reg_mod_finish 统一收尾
+        QJsonObject json;
+        json["email"] = email;
+        HttpMgr::GetInstance().PostHttpReq(
+            QUrl("http://localhost:8080/get_varifycode"),
+            json, ID_GET_VARIFY_CODE, Modules::REGISTERMOD);
+        showTip(tr("正在发送验证码......"),true);
     }else{
-        showTip(tr("邮箱地址不正确"));
+        showTip(tr("邮箱地址不正确"),false);
     }
 }

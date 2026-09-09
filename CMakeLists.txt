@@ -1,7 +1,16 @@
 cmake_minimum_required(VERSION 3.19)
 project(HxnChat LANGUAGES CXX)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets)
+# 设置编译选项
+if (MSVC)
+# /W4 = 警告等级 4（MSVC 最严格的常规警告级别）
+# /utf-8 → 强制使用 UTF-8 编码
+    add_compile_options(/W4 /utf-8)
+else()
+    add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets Network)
 find_package(spdlog REQUIRED)
 
 # ============================================================
@@ -27,6 +36,8 @@ qt_add_executable(HxnChat
     logindialog.ui
     app.rc
     global.h global.cpp
+    Singleton.h
+    httpmgr.h httpmgr.cpp
 
 
 )
@@ -38,6 +49,8 @@ target_link_libraries(HxnChat
     PRIVATE
         Qt::Core
         Qt::Widgets
+        Qt::Network
+        spdlog::spdlog
 )
 
 include(GNUInstallDirs)
