@@ -1,56 +1,73 @@
-# This file is used to ignore files which are generated
-# ----------------------------------------------------------------------------
+# ============================================================
+# HxnChat .gitignore
+# 原则：只保留源码(.cpp/.h)、界面(.ui)、资源(.ico/.rc)、CMakeLists.txt
+#       编译产物、IDE 个人配置、本地工具数据一律不入库
+# ============================================================
 
+# ---- 系统 / 编辑器 临时文件 ----
 *~
 *.autosave
-*.a
-*.core
-*.moc
-*.o
-*.obj
 *.orig
 *.rej
-*.so
-*.so.*
-*_pch.h.cpp
-*_resource.rc
-*.qm
 .#*
 *.*#
-core
-!core/
+.*.swp
+*.flc
 tags
 .DS_Store
 .directory
-*.debug
-Makefile*
-*.prl
-*.app
+Thumbs.db
+
+# ---- 编译中间产物 ----
+*.o
+*.obj
+*.moc
+*.core
+core
+!core/
+*_pch.h.cpp
 moc_*.cpp
 ui_*.h
 qrc_*.cpp
-Thumbs.db
+# 注意：app.rc 是手工维护的图标资源（CMakeLists 引用），必须入库；
+# 只忽略 qmake 自动生成的 *_resource.rc
+*_resource.rc
 *.res
-*.rc
-/.qmake.cache
-/.qmake.stash
+*.a
+*.so
+*.so.*
+*.prl
+*.app
+*.debug
+*.qm
+Makefile*
 
-# qtcreator generated files
+# ---- 可执行文件 / 动态库 / 调试符号 ----
+*.exe
+*.dll
+*.ilk
+*.idb
+*.pdb
+
+# ---- 构建目录 ----
+/build*/
+/out/
+.moc/
+.obj/
+.pch/
+.rcc/
+.uic/
+
+# ---- IDE 个人配置（跟随各人环境，不共享）----
 *.pro.user*
 *.qbs.user*
 CMakeLists.txt.user*
-
-# xemacs temporary files
-*.flc
-
-# Vim temporary files
-.*.swp
-
-# Visual Studio generated files
-*.ib_pdb_index
-*.idb
-*.ilk
-*.pdb
+.qmake.cache
+.qmake.stash
+.qtcreator/
+.vs/
+.vscode/
+.idea/
 *.sln
 *.suo
 *.vcproj
@@ -61,22 +78,8 @@ CMakeLists.txt.user*
 *.vcxproj
 *vcxproj.*
 
-# MinGW generated files
-*.Debug
-*.Release
+# ---- 本地 AI 工具数据（仅存在于本机，不入库）----
+.codebuddy/
 
-# Python byte code
+# ---- 其他 ----
 *.pyc
-
-# Binaries
-# --------
-*.dll
-*.exe
-
-# Directories with generated files
-.moc/
-.obj/
-.pch/
-.rcc/
-.uic/
-/build*/
