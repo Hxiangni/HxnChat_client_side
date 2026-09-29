@@ -44,7 +44,8 @@ private slots:
     void slot_reg_mod_finish(ReqId id, QString res, ErrorCodes err);
     //软槽（由 initConnect 手动 connect）
     void onGetCodeClicked ();          // 获取验证码
-
+    // 注册
+    void slot_registerBtn_clicked();
 private:
     //滑块（M3/M4）
     QWidget           *slider_        = nullptr;   // 滑块本体（浅粉渐变欢迎卡）

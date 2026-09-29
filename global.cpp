@@ -8,3 +8,6 @@ std::function<void(QWidget*)> repolish =[](QWidget *w){
     w->style()->unpolish(w);//卸载旧的样式
     w->style()->polish(w);//换上新样式
 };
+
+// 定义放 cpp，头文件只写 extern，否则多个 cpp 包含头文件会重复定义
+QString gate_url_prefix = QStringLiteral("http://localhost:8000");

@@ -100,6 +100,18 @@ void LoginDialog::initHttpHandler()
         showTip(tr("验证码已发送到邮箱，注意查收"), true);
         spdlog::debug("email is {}",email.toStdString());
     });
+
+    //注册注册用户回包逻辑
+    _handlers.insert(ReqId::ID_REG_USER, [this](QJsonObject jsonObj){
+        int error = jsonObj["error"].toInt();
+        if(error != ErrorCodes::SUCCESS){
+            showTip(tr("参数错误"),false);
+            return;
+        }
+        auto email = jsonObj["email"].toString();
+        showTip(tr("用户注册成功"), true);
+        spdlog::debug("[_handlers.insert] email is {}",email.toStdString());
+    });
 }
 
 void LoginDialog::initUI()
@@ -568,6 +580,10 @@ void LoginDialog::initConnect()
     connect(registerFields_.codeBtn_, &QPushButton::clicked, this,
             &LoginDialog::onGetCodeClicked);
 
+    //注册用户
+    connect(registerFields_.registerBtn_, &QPushButton::clicked, this,
+            &LoginDialog::slot_registerBtn_clicked);
+
     //请求发送完
     connect(&HttpMgr::GetInstance(), &HttpMgr::sig_reg_mod_finish, this, &LoginDialog::slot_reg_mod_finish);
 }
@@ -623,6 +639,7 @@ void LoginDialog::slot_reg_mod_finish(ReqId id, QString res, ErrorCodes err)
     return;
 }
 
+//软槽（由 initConnect 手动 connect）
 void LoginDialog::onGetCodeClicked()
 {
     // 读注册面板里「邮箱」输入框的内容（registerFields_.emailEdit_ 才是邮箱框）
@@ -645,10 +662,48 @@ void LoginDialog::onGetCodeClicked()
         QJsonObject json;
         json["email"] = email;
         HttpMgr::GetInstance().PostHttpReq(
-            QUrl("http://localhost:8080/get_varifycode"),
+            QUrl("http://localhost:8000/get_varifycode"),
             json, ID_GET_VARIFY_CODE, Modules::REGISTERMOD);
         showTip(tr("正在发送验证码......"),true);
     }else{
         showTip(tr("邮箱地址不正确"),false);
     }
+}
+
+void LoginDialog::slot_registerBtn_clicked()
+{
+     // 一次性读取：用户名/邮箱/验证码去首尾空白；密码绝不能 trim（空格可能是密码的一部分）
+    const QString user    = registerFields_.usernameEdit_->text().trimmed();
+    const QString email   = registerFields_.emailEdit_->text().trimmed();
+    const QString pass    = registerFields_.passwordEdit_->text();
+    const QString confirm = registerFields_.confirmEdit_->text();
+    const QString code    = registerFields_.codeEdit_->text().trimmed();
+
+    if (user.isEmpty())    { showTip(tr("用户名不能为空"), false); return; }
+    if (email.isEmpty())   { showTip(tr("邮箱不能为空"), false); return; }
+    // TODO: 邮箱格式也复用 onGetCodeClicked 里那条正则
+    if (pass.isEmpty())    { showTip(tr("密码不能为空"), false); return; }
+    if (confirm.isEmpty()) { showTip(tr("确认密码不能为空"), false); return; }
+    if (pass != confirm)   { showTip(tr("密码和确认密码不匹配"), false); return; }
+
+    // 验证码：6 位数字或字母（按服务器实际规则调整）
+    static const QRegularExpression codeRe(QStringLiteral("^[A-Za-z0-9]{6}$"));
+    if (!codeRe.match(code).hasMatch()) {
+        showTip(tr("验证码应为6位数字或字母"), false);
+        return;
+    }
+
+    //day11 发送http请求注册用户
+    QJsonObject json_obj;
+    json_obj["user"] = user;
+    json_obj["email"] = email;
+    json_obj["passwd"] = pass;
+    json_obj["confirm"] = confirm;
+    json_obj["varifycode"] = code;
+
+
+    //prefix前缀
+    //服务器收到包了但是没有回包显示网络错误
+    HttpMgr::GetInstance().PostHttpReq(QUrl(gate_url_prefix+"/user_register"),
+                                        json_obj, ReqId::ID_REG_USER,Modules::REGISTERMOD);
 }
